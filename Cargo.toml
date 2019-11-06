@@ -1,0 +1,18 @@
+[package]
+name = "tg_schema"
+version = "0.1.0"
+authors = ["Waffle <wafflelapkin@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "tgslib"
+path = "src/lib/lib.rs"
+
+[dependencies]
+select = "0.4.3"
+reqwest = { version = "0.10.0-alpha.1", features = ["blocking"] }
+itertools = "0.8.1"
+
+[[bin]]
+name = "tgsbin"
+path = "src/main.rs"

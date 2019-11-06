@@ -12,6 +12,11 @@ path = "src/lib/lib.rs"
 select = "0.4.3"
 reqwest = { version = "0.10.0-alpha.1", features = ["blocking"] }
 itertools = "0.8.1"
+strum = "0.16.0"
+#strum_macros = "0.16.0"
+#strum_macros = { path = "../strum/strum_macros" }
+strum_macros = { git = "https://github.com/WaffleLapkin/strum", rev = "f5dfa2fc27fec2d26aafb7bc1543bc79f07148e7" }
+
 
 [[bin]]
 name = "tgsbin"

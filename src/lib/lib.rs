@@ -1,51 +1,95 @@
 #![allow(dead_code)]
 //! Simple parser for [Telegram Bot API docs]
 //!
-//! [Telegram Bot API docs]: https://core.telegram.org/bots/api#available-methods
+//! [Telegram Bot API docs]: https://core.telegram.org/bots/api
+#[macro_use]
+extern crate strum_macros;
 
 use select::document::Document;
 use select::predicate::{Name};
 use std::fs::File;
 use std::any::type_name;
 
-pub struct Structure {
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Schema {
+    pub recent_changes: Vec<Change>, // TODO: changes
+    pub types: Vec<Type>,
+    pub methods: Vec<Method>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Change {
+    pub date: String, // TODO
+    pub version: String, // TODO
+    pub changes: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Type {
     pub name: String,
     pub descr: String,
     pub fields: Vec<Field>,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Field {
     pub name: String,
-    pub ty: Type,
+    pub ty: Primitive,
     pub descr: String,
 }
 
-pub enum Type {
-    I32, // tg's Integer
-    I64, // tg's Integer in some cases (writers of the doc, I hate you)
-    Str, // tg's String
-    Bool, // tg's Boolean
-    True, // tg's True
-    Complex { name: String },
-    Array(Box<Type>), // tg's Array of
-    ChatId, // tg's Integer or String
-    Option(Box<Type>), // tg's "Optional." in description
+pub const PRIMITIVES: &'static [&'static str] = Primitive::VARIANTS;
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, EnumVariantNames)]
+pub enum Primitive {
+    /// tg's Integer
+    I32,
+    /// tg's Integer in some cases (writers of the doc, I hate you)
+    I64,
+    /// tg's Float
+    F32,
+    /// tg's String
+    String,
+    /// tg's Boolean
+    Bool,
+    /// tg's True
+    True,
+    /// Struct type
+    Struct { name: String },
+    /// tg's `Array of`
+    Array(Box<Primitive>),
+    /// tg's "Optional. " in description
+    Option(Box<Primitive>),
+
+    // Special types:
+    /// tg's Integer or String
+    ChatId,
+    /// Parse mode is String in docs, but it's actually `HTML | Markdown` sum type
+    ParseMode,
+    /// Magical type, see https://core.telegram.org/bots/api#sending-files
+    /// Smt like `FileId(String) | Url(String) | File(...)` sum type
+    /// (do not forget that file must be uploaded with multipart/form-data)
+    InputFile,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Method {
     pub name: String,
     pub descr: String,
     pub params: Vec<Param>,
-    pub return_ty: Type,
+    pub return_ty: Primitive,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Param {
     pub name: String,
-    pub ty: Type,
+    pub ty: Primitive,
     pub required: Required,
     pub descr: String,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Required {
     Yes, Optional
 }
@@ -143,26 +187,23 @@ pub mod step1 {
 
 /// Second step - clean parsed HTML and convert to typed structures
 pub mod step2 {
-    use super::{step1, Structure};
+    use super::{step1, Type};
     use crate::step1::TypeSpecification;
-    use crate::{Field, Type};
+    use crate::{Field, Primitive};
 
-    pub fn types(specs: Vec<step1::TypeSpecification>) -> Vec<Structure> {
+    pub fn types(specs: Vec<step1::TypeSpecification>) -> Vec<Type> {
         specs
             .into_iter()
             .map(|spec| {
                 let TypeSpecification { h4: name, p: descr, table } = spec;
                 let fields = table.into_iter().map(|mut row| {
-                    let (name, ty, descr) = (row.remove(0), row.remove(0), row.remove(0));
-                    Field {
-                        name,
-                        ty: parse_type(&ty),
-                        descr,
-                    }
+                    let (name, ty, mut descr) = (row.remove(0), row.remove(0), row.remove(0));
+                    let ty = parse_type(&name, &ty, &mut descr);
+                    Field { name, ty, descr }
                 })
                 .collect::<Vec<_>>();
 
-                Structure {
+                Type {
                     name,
                     descr: descr.unwrap_or(String::from("")),
                     fields,
@@ -171,30 +212,39 @@ pub mod step2 {
             .collect()
     }
 
-    fn parse_type(string: &str) -> Type {
-//        I32, // tg's Integer
-//        I64, // tg's Integer in some cases (writers of the doc, I hate you)
-//        Str, // tg's String
-//        Bool, // tg's Boolean
-//        True, // tg's True
-//        Complex(Structure),
-//        Array(Box<Type>), // tg's Array of
-//        ChatId, // tg's Integer or String
-//        Option(Box<Type>), // tg's "Optional." in description
-
-        // TODO: I64
-        // TODO: Option
-        if string.starts_with("Array of ") {
-            return Type::Array(Box::new(parse_type(&string[8..])))
+    fn parse_type(name: &str, ty: &str, descr: &mut String) -> Primitive {
+        if descr.starts_with("Optional. ") {
+            *descr = String::from(&descr[10..]);
+            return Primitive::Option(Box::new(parse_type(name, ty, descr)))
         }
 
-        match string {
-            "Integer" => Type::I32,
-            "String" => Type::Str,
-            "Boolean" => Type::Bool,
-            "True" => Type::True,
-            "Integer or String" => Type::ChatId,
-            s => Type::Complex { name: String::from(s) },
+        // TODO: I64
+        if ty.starts_with(" ") {
+            // very stupid way to remove spaces, but ok
+            return parse_type(name, &ty[1..], descr)
+        }
+
+        if ty.starts_with("Array of ") {
+            return Primitive::Array(Box::new(parse_type(name, &ty[8..], descr)))
+        }
+
+        match ty {
+            // Dirty hack, but it work, ok?
+            "Integer" => if descr.contains("64") {
+                Primitive::I64
+            } else {
+                Primitive::I32
+            },
+            "String" => match name {
+                "parse_mode" => Primitive::ParseMode,
+                _ => Primitive::String,
+            },
+            "Boolean" => Primitive::Bool,
+            "True" => Primitive::True,
+            "Integer or String" => Primitive::ChatId,
+            "Float" => Primitive::F32,
+            "InputFile or String" => Primitive::InputFile,
+            s => Primitive::Struct { name: String::from(s) },
         }
     }
 }

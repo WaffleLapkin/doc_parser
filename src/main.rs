@@ -1,6 +1,7 @@
 use tgslib::step1::parse_available_types;
 use std::fs::File;
 use select::document::Document;
+use tgslib::step2::types;
 
 fn main() {
     const URL: &'static str = "https://core.telegram.org/bots/api";
@@ -9,5 +10,5 @@ fn main() {
     let file = File::open("./Telegram Bot API.html").unwrap();
     let doc = Document::from_read(file).unwrap();
 
-    dbg!(parse_available_types(doc));
+    dbg!(types(parse_available_types(doc)));
 }

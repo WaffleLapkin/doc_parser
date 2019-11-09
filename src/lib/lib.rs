@@ -102,7 +102,7 @@ pub mod step1 {
     use itertools::Itertools;
 
     /// Raw type specification from docs.
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone)]
     pub struct TypeSpecification {
         /// Name of the type
         pub h4: String,
@@ -110,6 +110,16 @@ pub mod step1 {
         pub p: Option<String>,
         /// Fields of the type
         pub table: Vec<Vec<String>>,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone)]
+    pub struct ChangesSpecification {
+        // date
+        pub h4: String,
+        // ver
+        pub p: Option<String>, // todo option => ""
+        // changes
+        pub ul: Vec<String>,
     }
 
     /// Parse all types from ["Available types"] section in [telegram docs]
@@ -184,6 +194,55 @@ pub mod step1 {
         res
     }
 
+    pub fn parse_recent_changes(doc: Document) -> Vec<ChangesSpecification> {
+        let start = doc
+            .find(Name("h3"))
+            .find(|n| n.text() == "Recent changes")
+            .unwrap()
+            .index();
+
+        let stop = doc
+            .find(Name("a"))
+            .find(|n| n.text() == "See earlier changes »")
+            .unwrap()
+            .index();
+
+        let res = (start..stop)
+            .map(|i| doc.nth(i))
+            .while_some()
+            .fold(Vec::<ChangesSpecification>::new(), |mut acc, node| {
+                if node.is(Name("h4")) {
+                    acc.push(ChangesSpecification { h4: node.text(), p: None, ul: vec![] });
+                } else if node.is(Name("p")) && node.text().starts_with("Bot API") {
+                    let last = acc.last_mut();
+                    let text = node.text();
+
+                    match last {
+                        // // Last type definition exists, but has no description
+                        Some(ChangesSpecification { p: p @ None, .. }) => { *p = Some(text) },
+                        // // Last type definition exists, and has description
+                        Some(ChangesSpecification { p: Some(t), .. }) => { t.push_str(&text) },
+                        // // Skip all <p> which are before first type definition
+                        None => println!("Warn: skipped <p>: {}", node.text()),
+                    };
+                } else if node.is(Name("ul")) {
+                    let vec = node
+                        .children()
+                        .filter(|tag| tag.is(Name("li")))
+                        .map(|x| x.text())
+                        .collect::<Vec<_>>();
+
+                    let last = acc.last_mut().expect("h4 before list");
+
+                    let ChangesSpecification { ul: v, .. } = last;
+                    v.extend(vec);
+                }
+
+                acc
+            });
+
+        res
+    }
 }
 
 /// Second step - clean parsed HTML and convert to typed structures

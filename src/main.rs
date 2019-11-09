@@ -10,5 +10,6 @@ fn main() {
     let file = File::open("./Telegram Bot API.html").unwrap();
     let doc = Document::from_read(file).unwrap();
 
-    dbg!(types(parse_available_types(doc)));
+    dbg!(tgslib::step1::parse_recent_changes(doc));
+    //dbg!(types(parse_available_types(doc)));
 }

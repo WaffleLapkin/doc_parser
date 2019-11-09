@@ -229,7 +229,7 @@ pub mod step2 {
         }
 
         match ty {
-            // Dirty hack, but it work, ok?
+            // Dirty hack, but it works, ok?
             "Integer" => if descr.contains("64") {
                 Primitive::I64
             } else {

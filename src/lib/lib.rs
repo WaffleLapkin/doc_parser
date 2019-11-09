@@ -14,6 +14,7 @@ use std::any::type_name;
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Schema {
     pub recent_changes: Vec<Change>, // TODO: changes
+    pub primitives: &'static [&'static str],
     pub types: Vec<Type>,
     pub methods: Vec<Method>,
 }

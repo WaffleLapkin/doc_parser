@@ -30,7 +30,7 @@ pub struct Change {
 /// ["Available types"]: https://core.telegram.org/bots/api#available-types
 /// [telegram docs]: https://core.telegram.org/bots/api
 /// [TypeSpecification]: self::TypeSpecification
-pub fn parse_available_types(doc: &Document) -> Vec<TypeSpec> {
+pub fn available_types(doc: &Document) -> Vec<TypeSpec> {
     let start = doc
         .find(Name("h3"))
         .find(|n| n.text() == "Available types")
@@ -96,7 +96,7 @@ pub fn parse_available_types(doc: &Document) -> Vec<TypeSpec> {
     res
 }
 
-pub fn parse_recent_changes(doc: Document) -> Vec<Change> {
+pub fn recent_changes(doc: &Document) -> Vec<Change> {
     let start = doc
         .find(Name("h3"))
         .find(|n| n.text() == "Recent changes")
